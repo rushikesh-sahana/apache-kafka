@@ -316,3 +316,4 @@ Kafka stores everything as **bytes** — the producer's serializer converts your
 * Followers just replicate data from the leader — they don't serve client traffic directly (unless you enable follower fetching for reads, added in newer versions)
 * If the leader broker dies, one of the followers is automatically promoted to leader.
 
+### 
