@@ -22,11 +22,11 @@ TOPIC_NAME = "orders"
 # Fixed, hand-written records instead of randomly generated ones, so the
 # output is identical and predictable on every run.
 STATIC_ORDERS = [
-    {"order_id": 1, "item": "widget",     "quantity": 2, "customer": "alice"},
-    {"order_id": 2, "item": "gadget",     "quantity": 1, "customer": "bob"},
-    {"order_id": 3, "item": "gizmo",      "quantity": 5, "customer": "carol"},
-    {"order_id": 4, "item": "widget",     "quantity": 3, "customer": "dave"},
-    {"order_id": 5, "item": "thingamajig","quantity": 1, "customer": "erin"},
+    {"order_id": 1, "item": "widget",      "quantity": 2, "customer": "alice"},
+    {"order_id": 2, "item": "gadget",      "quantity": 1, "customer": "bob"},
+    {"order_id": 3, "item": "gizmo",       "quantity": 5, "customer": "carol"},
+    {"order_id": 4, "item": "widget",      "quantity": 3, "customer": "dave"},
+    {"order_id": 5, "item": "thingamajig", "quantity": 1, "customer": "erin"},
 ]
 
 
@@ -45,32 +45,28 @@ def main():
     producer = create_producer()
     print(f"Producer connected. Publishing {len(STATIC_ORDERS)} static records to topic '{TOPIC_NAME}'...\n")
 
-    try:
-        for message in STATIC_ORDERS:
-            # KEY: used by Kafka to decide the partition (same key -> same partition).
-            # Using order_id as key here just for demonstration.
-            key = str(message["order_id"])
+    for message in STATIC_ORDERS:
+        # KEY: used by Kafka to decide the partition (same key -> same partition).
+        # Using order_id as key here just for demonstration.
+        key = str(message["order_id"])
 
-            # send() is async — it returns a "future". We block with get() just
-            # so we can print confirmation of exactly which partition/offset we landed on.
-             producer.send(TOPIC_NAME, key=key, value=message)
-           # record_metadata = future.get(timeout=10)
+        # send() is async — it returns a "future". We block with get() just
+        # so we can print confirmation of exactly which partition/offset we landed on.
+        future = producer.send(TOPIC_NAME, key=key, value=message)
+        record_metadata = future.get(timeout=10)
 
-            print(
-                f"Sent: {message} "
-#                 f"-> partition={record_metadata.partition}, offset={record_metadata.offset}"
-            )
+        print(
+            f"Sent: {message} "
+            f"-> partition={record_metadata.partition}, offset={record_metadata.offset}"
+        )
 
-            time.sleep(1)
+        time.sleep(1)
 
-        print("\nAll static records published. Exiting.")
+    # Make sure everything buffered actually gets delivered before we exit.
+    producer.flush()
+    producer.close()
 
-    except KeyboardInterrupt:
-        print("\nStopping producer...")
-    finally:
-        # flush() makes sure any buffered messages are actually sent before we exit.
-        producer.flush()
-        producer.close()
+    print("\nAll static records published. Exiting.")
 
 
 if __name__ == "__main__":
