@@ -53,8 +53,9 @@ def main():
 
             # send() is async — it returns a "future". We block with get() just
             # so we can print confirmation of exactly which partition/offset we landed on.
-             producer.send(TOPIC_NAME, key=key, value=message)
-            
+            future = producer.send(TOPIC_NAME, key=key, value=message)
+            record_metadata = future.get(timeout=10)
+
             print(
                 f"Sent: {message} "
                 f"-> partition={record_metadata.partition}, offset={record_metadata.offset}"
