@@ -316,4 +316,37 @@ Kafka stores everything as **bytes** — the producer's serializer converts your
 * Followers just replicate data from the leader — they don't serve client traffic directly (unless you enable follower fetching for reads, added in newer versions)
 * If the leader broker dies, one of the followers is automatically promoted to leader.
 
-### 
+# Kafka Poison Pill Messages
+
+## What is a Poison Pill?
+
+A **poison pill** is a message in a Kafka topic that a consumer cannot process successfully, no matter how many times it retries. Instead of being handled and moving on, it repeatedly causes the consumer to fail — effectively "poisoning" the consumption pipeline.
+
+## Why It's a Problem
+
+Kafka consumers typically process messages in order and only commit their offset after successful processing. A poison pill breaks this flow:
+
+1. The consumer reads the bad message.
+2. Processing throws an exception (deserialization error, malformed data, unexpected schema, business logic failure, etc.).
+3. The consumer doesn't commit the offset (since processing failed).
+4. On retry, it reads the **same message again** — and fails again.
+5. The consumer gets **stuck in an infinite loop**, unable to move past that offset, blocking all subsequent messages in that partition.
+
+## Common Causes
+
+- **Deserialization failures** — message format doesn't match the expected schema (e.g., corrupted JSON, wrong Avro schema).
+- **Null or malformed fields** the consumer logic doesn't expect.
+- **Schema evolution mismatches** — producer changed the schema but consumer wasn't updated.
+- **Unexpected data types** or values that break downstream business logic.
+- **Encoding issues** (e.g., wrong character encoding).
+
+## How to Handle / Prevent Poison Pills
+
+| Strategy | Description |
+|---|---|
+| **Try-Catch with Dead Letter Queue (DLQ)** | Catch processing exceptions, send the bad message to a separate DLQ topic, then commit the offset and move on. |
+| **Skip-and-log** | Log the error and skip the offset (use cautiously — can hide real issues). |
+| **Schema validation / Schema Registry** | Enforce schemas at the producer level (e.g., using Confluent Schema Registry) to prevent malformed messages from ever being published. |
+| **Retry with backoff + limit** | Retry a limited number of times, then divert to DLQ instead of retrying forever. |
+| **Custom deserializers with error handling** | Wrap deserialization logic to catch and handle bad payloads gracefully instead of crashing the consumer. |
+| **Monitoring/alerting** | Set up alerts for consumer lag spikes or repeated failures, which often signal a poison pill. |

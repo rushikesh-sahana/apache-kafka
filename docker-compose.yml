@@ -1,14 +1,22 @@
+version: "3.8"
+
 services:
   kafka:
     image: apache/kafka:3.7.0
     container_name: kafka-broker
     ports:
-      - "9092:9092"
+      # Host machine (your Python scripts) connects here -> mapped to the
+      # PLAINTEXT_HOST listener (container's internal port 29092).
+      - "9092:29092"
     environment:
       # --- KRaft mode: no Zookeeper needed ---
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      # Three listeners:
+      #   PLAINTEXT (9092)      -> broker-to-broker / inside the docker network, addressed as "kafka"
+      #   CONTROLLER (9093)     -> KRaft consensus traffic
+      #   PLAINTEXT_HOST (29092)-> for clients OUTSIDE docker (our Python scripts on the host)
       - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
       - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
@@ -27,6 +35,8 @@ services:
       - "8080:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
+      # Talks to the broker over the internal docker network,
+      # so it uses the PLAINTEXT listener (kafka:9092), not the host one.
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
     depends_on:
       - kafka
