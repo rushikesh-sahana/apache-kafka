@@ -1,7 +1,10 @@
 # Kafka Producer-Consumer POC (Python)
 
-A minimal, working example to learn Kafka by running it. One script publishes
-fake "order" events, another reads them.
+1. Basic Producer-Consumer
+   Single topic, one producer sending JSON messages (e.g., simulated user clicks), one consumer reading and printing them. Goal: understand topics, partitions, offsets, consumer groups.
+
+   A minimal, working example to learn Kafka by running it. One script publishes
+   fake "order" events, another reads them.
 
 ## 1. Start Kafka
 
