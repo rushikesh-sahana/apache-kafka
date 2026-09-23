@@ -8,9 +8,11 @@ which is handy while you're still learning and want predictable output.
 """
 
 import json
+import sys
 import time
 
 from kafka import KafkaProducer
+from kafka.errors import KafkaError, KafkaTimeoutError, NoBrokersAvailable
 
 # Where the Kafka broker lives (set up via docker-compose.yml)
 BOOTSTRAP_SERVERS = "localhost:9092"
@@ -38,33 +40,60 @@ def create_producer() -> KafkaProducer:
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         # key_serializer determines which PARTITION a message lands in.
         key_serializer=lambda k: k.encode("utf-8") if k else None,
+        acks='all',  # wait for all replicas to ack
+        retries=3,
+        request_timeout_ms=30_000,
     )
 
 
 def main():
-    producer = create_producer()
+    # 1) Connecting to the broker can fail (broker down, wrong host/port, etc.)
+    try:
+        producer = create_producer()
+    except NoBrokersAvailable:
+        print(f"ERROR: Could not reach any Kafka broker at '{BOOTSTRAP_SERVERS}'. "
+              f"Is it running?")
+        sys.exit(1)
+    except KafkaError as e:
+        print(f"ERROR: Failed to create producer: {e}")
+        sys.exit(1)
+
     print(f"Producer connected. Publishing {len(STATIC_ORDERS)} static records to topic '{TOPIC_NAME}'...\n")
 
-    for message in STATIC_ORDERS:
-        # KEY: used by Kafka to decide the partition (same key -> same partition).
-        # Using order_id as key here just for demonstration.
-        key = str(message["order_id"])
+    try:
+        for message in STATIC_ORDERS:
+            # KEY: used by Kafka to decide the partition (same key -> same partition).
+            # Using order_id as key here just for demonstration.
+            key = str(message["order_id"])
 
-        # send() is async — it returns a "future". We block with get() just
-        # so we can print confirmation of exactly which partition/offset we landed on.
-        future = producer.send(TOPIC_NAME, key=key, value=message)
-        record_metadata = future.get(timeout=10)
+            try:
+                # send() is async — it returns a "future". We block with get() just
+                # so we can print confirmation of exactly which partition/offset we landed on.
+                future = producer.send(TOPIC_NAME, key=key, value=message)
+                record_metadata = future.get(timeout=10)
 
-        print(
-            f"Sent: {message} "
-            f"-> partition={record_metadata.partition}, offset={record_metadata.offset}"
-        )
+                print(
+                    f"Sent: {message} "
+                    f"-> partition={record_metadata.partition}, offset={record_metadata.offset}"
+                )
+            except KafkaTimeoutError:
+                print(f"ERROR: Timed out sending {message} (no ack within 10s). Skipping.")
+            except KafkaError as e:
+                print(f"ERROR: Failed to send {message}: {e}. Skipping.")
 
-        time.sleep(1)
+            time.sleep(1)
 
-    # Make sure everything buffered actually gets delivered before we exit.
-    producer.flush()
-    producer.close()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Shutting down...")
+
+    finally:
+        # Make sure everything buffered actually gets delivered before we exit,
+        # even if we hit an error or Ctrl+C above.
+        try:
+            producer.flush(timeout=10)
+        except KafkaError as e:
+            print(f"WARNING: Error flushing producer: {e}")
+        producer.close()
 
     print("\nAll static records published. Exiting.")
 
