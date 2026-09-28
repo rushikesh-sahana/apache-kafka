@@ -24,7 +24,6 @@ print("===================================")
 print("CRASH CONSUMER STARTED")
 print("===================================")
 
-processed = 0
 
 for message in consumer:
 
@@ -39,7 +38,7 @@ for message in consumer:
     # Simulate business processing
     time.sleep(0.2)
 
-    processed += 1
+
 
     # --------------------------------
     # Process 100-149
